@@ -254,8 +254,6 @@ func (c *client) createMultisigTx(ctx context.Context, a map[string]string) erro
 			return fmt.Errorf("decode tx: %v", err)
 		}
 
-		fmt.Printf("prevHash: %v\n", prevHash)
-
 		// Find the tree, decred specific
 		url := c.cfg.dcrdata + "/tx/hex/" + prevHash.String()
 		rawTxS, err := c.httpRequest(ctx, url, 5*time.Second)
