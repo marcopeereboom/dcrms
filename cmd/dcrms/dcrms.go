@@ -17,6 +17,7 @@ import (
 	"decred.org/dcrwallet/wallet/txrules"
 	"decred.org/dcrwallet/wallet/txsizes"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/decred/dcrd/blockchain/stake/v3"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/dcrutil/v3"
 	"github.com/decred/dcrd/txscript/v3"
@@ -253,20 +254,29 @@ func (c *client) createMultisigTx(ctx context.Context, a map[string]string) erro
 			return fmt.Errorf("decode tx: %v", err)
 		}
 
-		// Find the tree, decred specific
-		//var dcrouts []it.TxOut
-		//url := c.cfg.insight + "/addr/" + address + "/utxo"
+		fmt.Printf("prevHash: %v\n", prevHash)
 
-		//resp, err := c.httpRequest(ctx, url, 5*time.Second)
-		//if err != nil {
-		//	return err
-		//}
-		//err = json.Unmarshal(resp, &utxos)
-		//if err != nil {
-		//	return err
-		//}
-		// XXX find tree, getrawtransaction, decode that, get tree
-		tree := int8(0)
+		// Find the tree, decred specific
+		url := c.cfg.dcrdata + "/tx/hex/" + prevHash.String()
+		rawTxS, err := c.httpRequest(ctx, url, 5*time.Second)
+		if err != nil {
+			return err
+		}
+		log.Tracef("%v", spew.Sdump(rawTxS))
+		rawTx, err := hex.DecodeString(string(rawTxS))
+		if err != nil {
+			return fmt.Errorf("decode raw hex: %v", err)
+		}
+		prevTx := wire.NewMsgTx()
+		err = prevTx.FromBytes(rawTx)
+		if err != nil {
+			return fmt.Errorf("decode raw tx: %v", err)
+		}
+		tree := wire.TxTreeRegular
+		st := stake.DetermineTxType(prevTx, true)
+		if st != stake.TxTypeRegular {
+			tree = wire.TxTreeStake
+		}
 
 		// Get redeem script
 		moir, err := c.getMultisigOutInfo(ctx, utxos[k].TxnID,

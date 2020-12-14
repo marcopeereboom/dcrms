@@ -5,6 +5,7 @@ go 1.15
 require (
 	decred.org/dcrwallet v1.6.0-rc4.2.0.20201209222619-c029b1f7dc0e
 	github.com/davecgh/go-spew v1.1.1
+	github.com/decred/dcrd/blockchain/stake/v3 v3.0.0
 	github.com/decred/dcrd/chaincfg v1.5.1
 	github.com/decred/dcrd/chaincfg/chainhash v1.0.2
 	github.com/decred/dcrd/chaincfg/v3 v3.0.0
