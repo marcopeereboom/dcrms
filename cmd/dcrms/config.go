@@ -79,7 +79,7 @@ Actions:
 	Create a multisig address that requires n signatures out of number of keys
   sendtomultisig address=<address> amount=<amount>
 	Send funds to an address; wallet must be unlocked
-  createmultisigtx address=<address> to=<address> amount=<amount>
+  createmultisigtx address=<address> to=<address> amount=<amount> confirmations=<number>
 	Create an unsigned multisig transaction
   signmultisigtx tx=<partially signed transaction>
 	Partially, or fully, sign, a multisig transation

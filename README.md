@@ -59,7 +59,7 @@ $ dcrms sendtomultisig address="addr" amount="1.0"
 ```
 
 ```
-$ dcrms createmultisigtx address="publickey" to="toaddr" amount="1.0"
+$ dcrms createmultisigtx address="publickey" to="toaddr" amount="1.0" confirmations="6"
 ```
 
 ```
@@ -118,7 +118,7 @@ dcrms --net=testnet3 getmultisigbalance address=TcerhCZvVVzjYKQoKUybohE75ZxPgPqM
 
 Send 5 DCR to Diane (TsoD8TRGwJdQ3DrxFaV537ffDHnoW3bfD5B)
 ```
-$ dcrms --net=testnet3 createmultisigtx address=TcerhCZvVVzjYKQoKUybohE75ZxPgPqManG to=TsoD8TRGwJdQ3DrxFaV537ffDHnoW3bfD5B amount=5
+$ dcrms --net=testnet3 createmultisigtx address=TcerhCZvVVzjYKQoKUybohE75ZxPgPqManG to=TsoD8TRGwJdQ3DrxFaV537ffDHnoW3bfD5B amount=5 confirmations=6
 010000000167fba05ceb00821c6612a18e4411c1f41b19d6c073d15f9dd88a8aa5e05d36ce0000000000ffffffff020065cd1d0000000000001976a914f367538f6c8748c0ddb3f7709070d1b4a977528688ac9c6a3e3602000000000017a914508b7c7fd8e2a2fd49bacf6483b14ebce49fbc238700000000000000000100e40b540200000000000000ffffffff6952210254cf9dc4798eabd6dd1e34a6ea2a4d387bc6b766b1c73609a27d12da3ab9d9772102b687ff58749bd90dd50b37776312d73e91549dccdf81327bda9cb42df855f2652103a2d4d194f1369e147dc88bbc5d7c280ca323da1b660cc7e7782db59db491fd2e53ae
 ```
 
