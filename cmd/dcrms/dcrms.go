@@ -27,6 +27,10 @@ import (
 	"github.com/juju/loggo"
 )
 
+const (
+	defaultConfirmations = 6
+)
+
 var (
 	log = loggo.GetLogger("dcrms")
 )
@@ -195,7 +199,77 @@ func (c *client) getMultisigOutInfo(ctx context.Context, tx string, vout uint32)
 	return &moir, nil
 }
 
+// getUtxos returns a map of utxos that have had enough confirmations.
+func (c *client) getUtxos(ctx context.Context, address string, confirmations int64) (map[string]it.AddressTxnOutput, error) {
+	var utxos []it.AddressTxnOutput
+	url := c.cfg.insight + "/addr/" + address + "/utxo"
+
+	resp, err := c.httpRequest(ctx, url, 5*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(resp, &utxos)
+	if err != nil {
+		return nil, err
+	}
+	log.Tracef("%v", spew.Sdump(utxos))
+
+	u := make(map[string]it.AddressTxnOutput, len(utxos))
+	for k := range utxos {
+		if utxos[k].Confirmations < confirmations {
+			continue
+		}
+		txID := utxos[k].TxnID
+		if _, ok := u[txID]; ok {
+			return nil, fmt.Errorf("duplicate tx ud: %v", txID)
+		}
+		u[txID] = utxos[k]
+
+	}
+
+	return u, nil
+}
+
+func (c *client) assembleTxIns(ctx context.Context, redeemScript []byte, utxos []it.AddressTxnOutput) ([]*wire.TxIn, error) {
+	txIns := make([]*wire.TxIn, 0, len(utxos))
+	for k := range utxos {
+		prevHash, err := chainhash.NewHashFromStr(utxos[k].TxnID)
+		if err != nil {
+			return nil, fmt.Errorf("decode tx: %v", err)
+		}
+
+		// Find the tree, decred specific
+		url := c.cfg.dcrdata + "/tx/hex/" + prevHash.String()
+		rawTxS, err := c.httpRequest(ctx, url, 5*time.Second)
+		if err != nil {
+			return nil, fmt.Errorf("get hex tx: %v", err)
+		}
+		log.Tracef("%v", spew.Sdump(rawTxS))
+		rawTx, err := hex.DecodeString(string(rawTxS))
+		if err != nil {
+			return nil, fmt.Errorf("decode raw hex: %v", err)
+		}
+		prevTx := wire.NewMsgTx()
+		err = prevTx.FromBytes(rawTx)
+		if err != nil {
+			return nil, fmt.Errorf("decode raw tx: %v", err)
+		}
+		tree := wire.TxTreeRegular
+		st := stake.DetermineTxType(prevTx, true)
+		if st != stake.TxTypeRegular {
+			tree = wire.TxTreeStake
+		}
+
+		// Add input
+		outPoint := wire.NewOutPoint(prevHash, utxos[k].Vout, tree)
+		txIn := wire.NewTxIn(outPoint, utxos[k].Satoshis, redeemScript)
+		txIns = append(txIns, txIn)
+	}
+	return txIns, nil
+}
+
 func (c *client) createMultisigTx(ctx context.Context, a map[string]string) error {
+	// Multisig address
 	address, err := ArgAsString("address", a)
 	if err != nil {
 		return err
@@ -205,6 +279,7 @@ func (c *client) createMultisigTx(ctx context.Context, a map[string]string) erro
 		return err
 	}
 
+	// Destination
 	to, err := ArgAsString("to", a)
 	if err != nil {
 		return err
@@ -214,6 +289,7 @@ func (c *client) createMultisigTx(ctx context.Context, a map[string]string) erro
 		return err
 	}
 
+	// Amount
 	amount, err := ArgAsFloat("amount", a)
 	if err != nil {
 		return err
@@ -223,118 +299,112 @@ func (c *client) createMultisigTx(ctx context.Context, a map[string]string) erro
 		return fmt.Errorf("NewAmount: %v", err)
 	}
 
+	confirmations, err := ArgAsInt("confirmations", a)
+	if err != nil {
+		confirmations = defaultConfirmations
+	}
 	// See if we have enough balance
-	// XXX
+	var balance jt.GetBalanceResult
+	err = c.walletCall(ctx, "getbalance", &balance)
+	if err != nil {
+		return fmt.Errorf("getbalance: %v", err)
+	}
+	if balance.TotalSpendable < amount {
+		return fmt.Errorf("balance too low: available %v",
+			balance.TotalSpendable)
+	}
 
 	// Find all utxos
-	var utxos []it.AddressTxnOutput
-	url := c.cfg.insight + "/addr/" + address + "/utxo"
-
-	resp, err := c.httpRequest(ctx, url, 5*time.Second)
+	utxos, err := c.getUtxos(ctx, address, int64(confirmations))
 	if err != nil {
-		return err
+		return fmt.Errorf("getUtxos: %v", err)
 	}
-	err = json.Unmarshal(resp, &utxos)
-	if err != nil {
-		return err
-	}
-	log.Tracef("%v", spew.Sdump(utxos))
 
-	lookingFor := amount * 1.05 // Just use 5% for now
-	log.Tracef("Looking for amount %v\n", lookingFor)
+	// Select utxos
+	utxoList := make([]it.AddressTxnOutput, 0, len(utxos))
+	foundAmount := 0.0
 	for k := range utxos {
-		if utxos[k].Amount < lookingFor {
-			continue
+		utxoList = append(utxoList, utxos[k])
+		foundAmount += utxos[k].Amount
+		fmt.Printf("foundAmount %v\n", foundAmount)
+		if foundAmount > amount {
+			break
 		}
-		log.Tracef("tx %v:%v amount %v\n", utxos[k].TxnID,
-			utxos[k].Vout, utxos[k].Amount)
-
-		prevHash, err := chainhash.NewHashFromStr(utxos[k].TxnID)
-		if err != nil {
-			return fmt.Errorf("decode tx: %v", err)
-		}
-
-		// Find the tree, decred specific
-		url := c.cfg.dcrdata + "/tx/hex/" + prevHash.String()
-		rawTxS, err := c.httpRequest(ctx, url, 5*time.Second)
-		if err != nil {
-			return err
-		}
-		log.Tracef("%v", spew.Sdump(rawTxS))
-		rawTx, err := hex.DecodeString(string(rawTxS))
-		if err != nil {
-			return fmt.Errorf("decode raw hex: %v", err)
-		}
-		prevTx := wire.NewMsgTx()
-		err = prevTx.FromBytes(rawTx)
-		if err != nil {
-			return fmt.Errorf("decode raw tx: %v", err)
-		}
-		tree := wire.TxTreeRegular
-		st := stake.DetermineTxType(prevTx, true)
-		if st != stake.TxTypeRegular {
-			tree = wire.TxTreeStake
-		}
-
-		// Get redeem script
-		moir, err := c.getMultisigOutInfo(ctx, utxos[k].TxnID,
-			utxos[k].Vout)
-		if err != nil {
-			return fmt.Errorf("getMultisigOutInfo: %v", err)
-		}
-		redeemScript, err := hex.DecodeString(moir.RedeemScript)
-		if err != nil {
-			return fmt.Errorf("decode string: %v", err)
-		}
-		signers := moir.M
-
-		// Assemble tx
-		unsignedTx := wire.NewMsgTx()
-
-		// Inputs
-		outPoint := wire.NewOutPoint(prevHash, utxos[k].Vout, tree)
-		txIn := wire.NewTxIn(outPoint, utxos[k].Satoshis, redeemScript)
-		unsignedTx.AddTxIn(txIn)
-
-		// Outputs
-		script, err := txscript.PayToAddrScript(toAddress)
-		if err != nil {
-			return fmt.Errorf("DecodeAddress: %v", err)
-		}
-		txOut := wire.NewTxOut(int64(outValue), script)
-		unsignedTx.AddTxOut(txOut)
-
-		// Change
-		changeScript, err := txscript.PayToAddrScript(change)
-		if err != nil {
-			return fmt.Errorf("PayToAddrScript: %v", err)
-		}
-
-		// Note that size * signers slightly overpays
-		signersSize := int(txsizes.RedeemP2PKHSigScriptSize * signers)
-		inputSizes := []int{signersSize, len(redeemScript)}
-		outputSizes := []int{txsizes.P2PKHPkScriptSize}
-		changeSize := txsizes.P2SHPkScriptSize
-		sz := txsizes.EstimateSerializeSizeFromScriptSizes(inputSizes,
-			outputSizes, changeSize)
-		fee := txrules.FeeForSerializeSize(txrules.DefaultRelayFeePerKb,
-			sz)
-		txOutChange := wire.NewTxOut(utxos[k].Satoshis-int64(outValue+fee),
-			changeScript)
-		unsignedTx.AddTxOut(txOutChange)
-
-		// Dump
-		log.Tracef("%v", spew.Sdump(unsignedTx))
-		serializedTX, err := unsignedTx.Bytes()
-		if err != nil {
-			return fmt.Errorf("serialize: %v", err)
-		}
-		fmt.Printf("%x\n", serializedTX)
-
-		return nil
+	}
+	if len(utxoList) == 0 {
+		return fmt.Errorf("0 utxos found to assemble transaction")
+	}
+	if foundAmount <= amount {
+		return fmt.Errorf("not enough total value: %v", foundAmount)
+	}
+	foundAtoms, err := dcrutil.NewAmount(foundAmount)
+	if err != nil {
+		return fmt.Errorf("foundAtoms: %v", err)
 	}
 
-	return fmt.Errorf("no suitable utxo found for amount: %v", lookingFor)
+	spew.Dump(utxoList)
+
+	// Get redeem script and signers
+	moir, err := c.getMultisigOutInfo(ctx, utxoList[0].TxnID,
+		utxoList[0].Vout)
+	if err != nil {
+		return fmt.Errorf("getMultisigOutInfo: %v", err)
+	}
+	redeemScript, err := hex.DecodeString(moir.RedeemScript)
+	if err != nil {
+		return fmt.Errorf("decode string: %v", err)
+	}
+	signers := moir.M
+
+	// Get previous outpoints
+	txIns, err := c.assembleTxIns(ctx, redeemScript, utxoList)
+	if err != nil {
+		return fmt.Errorf("getPrevOutpoints: %v", err)
+	}
+
+	// Assemble tx
+	unsignedTx := wire.NewMsgTx()
+	for k := range txIns {
+		unsignedTx.AddTxIn(txIns[k])
+	}
+
+	// Output
+	script, err := txscript.PayToAddrScript(toAddress)
+	if err != nil {
+		return fmt.Errorf("DecodeAddress: %v", err)
+	}
+	txOut := wire.NewTxOut(int64(outValue), script)
+	unsignedTx.AddTxOut(txOut)
+
+	// Change
+	changeScript, err := txscript.PayToAddrScript(change)
+	if err != nil {
+		return fmt.Errorf("PayToAddrScript: %v", err)
+	}
+
+	// Note that size * signers slightly overpays
+	signersSize := int(txsizes.RedeemP2PKHSigScriptSize * signers)
+	inputSizes := []int{signersSize, len(redeemScript)}
+	outputSizes := []int{txsizes.P2PKHPkScriptSize}
+	changeSize := txsizes.P2SHPkScriptSize
+	sz := txsizes.EstimateSerializeSizeFromScriptSizes(inputSizes,
+		outputSizes, changeSize)
+	fee := txrules.FeeForSerializeSize(txrules.DefaultRelayFeePerKb,
+		sz)
+	txOutChange := wire.NewTxOut(int64(foundAtoms)-int64(outValue+fee),
+		changeScript)
+	unsignedTx.AddTxOut(txOutChange)
+
+	// Dump
+	fmt.Printf("tx: %v", spew.Sdump(unsignedTx))
+	log.Tracef("%v", spew.Sdump(unsignedTx))
+	serializedTX, err := unsignedTx.Bytes()
+	if err != nil {
+		return fmt.Errorf("serialize: %v", err)
+	}
+	fmt.Printf("%x\n", serializedTX)
+
+	return nil
 }
 
 func (c *client) signMultiSigTx(ctx context.Context, a map[string]string) error {
