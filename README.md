@@ -158,9 +158,10 @@ TRANSACTION SIGNING *NOT* COMPLETE
 
 ^^^---- Bug right here, should have completed signing.
 
-Broadcast signed transaction to network:
+Bob broadcasts signed transaction to network:
 ```
-$ dcrms --net=testnet3 broadcastmultisigtx tx=
+$ dcrms --net=testnet3 broadcastmultisigtx tx=wompwomp
+ihaveabug
 ```
 
 ## Todo
