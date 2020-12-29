@@ -67,7 +67,7 @@ $ dcrms signmultisigtx tx="hextx"
 ```
 
 ```
-$ dcrms broadcastmultisigtx signedtx="hextx"
+$ dcrms broadcastmultisigtx tx="hextx"
 ```
 
 ```
@@ -136,11 +136,11 @@ hextxsigned
 
 Broadcast signed transaction to network:
 ```
-$ dcrms --net=testnet3 broadcastmultisigtx signedtx=hextxsigned
+$ dcrms --net=testnet3 broadcastmultisigtx tx=hextxsigned
 95c92b9da481ddf0520252833b0cfa5bb1897283127376c2fd4f310b67194f20
 ```
 
 ## Todo
 
-* Make a better utxo picker
+* Make utxo picker add some guestimate of fees in case the amounts add up exactly
 * implement sweep

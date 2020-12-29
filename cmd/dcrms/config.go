@@ -87,6 +87,8 @@ Actions:
 	Broadcast multi signature transaction to the network
   multisiginfo address=<public key>
 	Print information about the multisg address
+  importredeemscript script=<hex>
+	Import a redeemscript into the wallet. It takes a few minutes for the wallet to recognize the script.
   sweepmultisig address=<publickey>
 	Not implemented yet.
 `)

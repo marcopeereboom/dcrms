@@ -432,6 +432,7 @@ func (c *client) signMultiSigTx(ctx context.Context, a map[string]string) error 
 		return err
 	}
 	log.Tracef("%v", spew.Sdump(srtr))
+	fmt.Printf("%v", spew.Sdump(srtr))
 
 	if srtr.Complete {
 		fmt.Printf("TRANSACTION SIGNING COMPLETE\n")
@@ -524,6 +525,19 @@ func (c *client) multisigInfo(ctx context.Context, a map[string]string) error {
 	return nil
 }
 
+func (c *client) importRedeemScript(ctx context.Context, a map[string]string) error {
+	script, err := ArgAsString("script", a)
+	if err != nil {
+		return err
+	}
+
+	err = c.walletCall(ctx, "importscript", nil, script, 1)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *client) sweepMultisig(ctx context.Context, a map[string]string) error {
 	return fmt.Errorf("not implemented yet")
 }
@@ -574,6 +588,8 @@ func _main() error {
 			return c.broadcastMultisigTx(ctx, a)
 		case "multisiginfo":
 			return c.multisigInfo(ctx, a)
+		case "importredeemscript":
+			return c.importRedeemScript(ctx, a)
 		case "sweepmultisig":
 			return c.sweepMultisig(ctx, a)
 		default:
