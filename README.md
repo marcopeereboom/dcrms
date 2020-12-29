@@ -93,19 +93,19 @@ TkQ4HxtQMvWQ8VypqyR6nj4xxwxEU667ceEH2EfyEZajhCLZFwkwx
 Bob obtains a public key:
 ```
 $ dcrms --net=testnet3 getnewkey
-TkKmwJxm5axvRekvQR82HHr7BPiUz7pGmUqBP7ez28CVw9cv8y9mB
+TkKnHcV4PEd3Cz9NvAV9hCAqAiW2zyWBsgMvEcou78KtrNKBKmJU7
 ```
 
-Charlie obtains a public key:
+Alice creates a multisig address:
 ```
-$ dcrms --net=testnet3 getnewkey
-TkQ4bvLP1uKTwHUuNtrTxrwLBsNaQmfRFGFgHiftv1k16C1Jvcgpy
+$ dcrms --net=testnet3 createmultisigaddress n=2 keys=TkQ4HxtQMvWQ8VypqyR6nj4xxwxEU667ceEH2EfyEZajhCLZFwkwx,TkKnHcV4PEd3Cz9NvAV9hCAqAiW2zyWBsgMvEcou78KtrNKBKmJU7
+Tcgeou3sAxjvyFecHcLDaQwJ59gTHZ53Fsi
+5221037a0f5e5616bf12e395d3cef6d65ea38bf3bc570fc2b353a169ac30bda84f63932102e4a131b2f1dce7177b18a97265d99b91aed29cbdbac9142e2539dcd7fb01429852ae
 ```
 
-Create a multisig address:
+Alice imports redeem script:
 ```
-$ dcrms --net=testnet3 createmultisigaddress n=2 keys=TkKmCGq5rjhgecymkseKC7SoAeUjynXL3naxrzGzbnUurvrXpWwU1,TkKmwJxm5axvRekvQR82HHr7BPiUz7pGmUqBP7ez28CVw9cv8y9mB,TkQ4bvLP1uKTwHUuNtrTxrwLBsNaQmfRFGFgHiftv1k16C1Jvcgpy
-TcerhCZvVVzjYKQoKUybohE75ZxPgPqManG
+$ dcrms --net=testnet3 importredeemscript script=5221037a0f5e5616bf12e395d3cef6d65ea38bf3bc570fc2b353a169ac30bda84f63932102e4a131b2f1dce7177b18a97265d99b91aed29cbdbac9142e2539dcd7fb01429852ae
 ```
 
 Fund multisig address with 100 DCR (must unlock wallet):

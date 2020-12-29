@@ -531,7 +531,7 @@ func (c *client) importRedeemScript(ctx context.Context, a map[string]string) er
 		return err
 	}
 
-	err = c.walletCall(ctx, "importscript", nil, script, 1)
+	err = c.walletCall(ctx, "importscript", nil, script, true)
 	if err != nil {
 		return err
 	}
