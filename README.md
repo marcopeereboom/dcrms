@@ -78,12 +78,16 @@ $ dcrms sweepmultisig address="publickey"
 $ dcrms multisiginfo address="publickey"
 ```
 
-## Example workflow
+```
+$ dcrms importredeemscript script="script"
+```
+
+## Example workflow for a 2 of 2
 
 Alice obtains a public key:
 ```
 $ dcrms --net=testnet3 getnewkey
-TkKmCGq5rjhgecymkseKC7SoAeUjynXL3naxrzGzbnUurvrXpWwU1
+TkQ4HxtQMvWQ8VypqyR6nj4xxwxEU667ceEH2EfyEZajhCLZFwkwx
 ```
 
 Bob obtains a public key:

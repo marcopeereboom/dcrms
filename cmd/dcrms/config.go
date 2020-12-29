@@ -104,7 +104,7 @@ func (c *config) FlagSet() *flag.FlagSet {
 	fs.StringVar(&c.Cert, "cert", dcrwalletCert, "")
 	fs.StringVar(&c.Wallet, "wallet", "", "")
 	fs.StringVar(&c.User, "user", "", "")
-	fs.StringVar(&c.Pass, "key", "", "")
+	fs.StringVar(&c.Pass, "pass", "", "")
 	fs.StringVar(&c.Net, "net", "mainnet", "")
 	fs.StringVar(&c.Log, "log", defaultLogging, "")
 	fs.Usage = usage
