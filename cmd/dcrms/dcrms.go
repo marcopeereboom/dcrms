@@ -165,7 +165,7 @@ func (c *client) createMultisigAddress(ctx context.Context, a map[string]string)
 	log.Tracef("%v", msa)
 	fmt.Printf("%v\n", msa.Address)
 	// Don't think we need to print redeem script.
-	//fmt.Printf("%v\n", msa.RedeemScript)
+	fmt.Printf("%v\n", msa.RedeemScript)
 
 	return nil
 }
@@ -433,8 +433,10 @@ func (c *client) signMultiSigTx(ctx context.Context, a map[string]string) error 
 	}
 	log.Tracef("%v", spew.Sdump(srtr))
 
-	if len(srtr.Errors) > 0 {
-		return fmt.Errorf("SignRawTransaction: %v", srtr)
+	if srtr.Complete {
+		fmt.Printf("TRANSACTION SIGNING COMPLETE\n")
+	} else {
+		fmt.Printf("TRANSACTION SIGNING *NOT* COMPLETE\n")
 	}
 	fmt.Printf("%v\n", srtr.Hex)
 
