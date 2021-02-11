@@ -58,7 +58,7 @@ Flags:
         Configuration file
   -v	Show version and exit
   -cert <certificate>
-	Wallet certificate (uses ~/dcrwallet/rpc.cert by default)
+	Wallet certificate (uses ~./dcrwallet/rpc.cert by default)
   -wallet <websocket>
 	Wallet websocket URL. Default wss://localhost:9110/ws
   -user <username>
@@ -89,6 +89,8 @@ Actions:
 	Print information about the multisg address
   importredeemscript script=<hex>
 	Import a redeemscript into the wallet. It takes a few minutes for the wallet to recognize the script.
+  deserializetx tx=<hex>
+	Deserialize transaction hex and pretty print the result.
   sweepmultisig address=<publickey>
 	Not implemented yet.
 `)

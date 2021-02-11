@@ -230,7 +230,57 @@ func (c *client) getUtxos(ctx context.Context, address string, confirmations int
 	return u, nil
 }
 
+func (c *client) assembleRawTxIns(ctx context.Context, redeemScript []byte, utxos []it.AddressTxnOutput) ([]types.RawTxInput, error) {
+	txIns := make([]types.RawTxInput, 0, len(utxos))
+	for k := range utxos {
+		prevHash, err := chainhash.NewHashFromStr(utxos[k].TxnID)
+		if err != nil {
+			return nil, fmt.Errorf("decode tx: %v", err)
+		}
+
+		// Find the tree, decred specific
+		url := c.cfg.dcrdata + "/tx/hex/" + prevHash.String()
+		rawTxS, err := c.httpRequest(ctx, url, 5*time.Second)
+		if err != nil {
+			return nil, fmt.Errorf("get hex tx: %v", err)
+		}
+		log.Tracef("%v", spew.Sdump(rawTxS))
+		rawTx, err := hex.DecodeString(string(rawTxS))
+		if err != nil {
+			return nil, fmt.Errorf("decode raw hex: %v", err)
+		}
+		prevTx := wire.NewMsgTx()
+		err = prevTx.FromBytes(rawTx)
+		if err != nil {
+			return nil, fmt.Errorf("decode raw tx: %v", err)
+		}
+		tree := wire.TxTreeRegular
+		st := stake.DetermineTxType(prevTx, true)
+		if st != stake.TxTypeRegular {
+			tree = wire.TxTreeStake
+		}
+		//fmt.Printf("prevTX: %v\n", spew.Sdump(prevTx))
+
+		// Add input
+		//outPoint := wire.NewOutPoint(prevHash, utxos[k].Vout, tree)
+		//txIn := wire.NewTxIn(outPoint, utxos[k].Satoshis, rs)
+		txIns = append(txIns, types.RawTxInput{
+			Txid:         utxos[k].TxnID,
+			Vout:         utxos[k].Vout,
+			Tree:         tree,
+			ScriptPubKey: utxos[k].ScriptPubKey,
+			RedeemScript: hex.EncodeToString(redeemScript),
+		})
+	}
+	return txIns, nil
+}
+
 func (c *client) assembleTxIns(ctx context.Context, redeemScript []byte, utxos []it.AddressTxnOutput) ([]*wire.TxIn, error) {
+	rs, err := txscript.NewScriptBuilder().AddData(redeemScript).Script()
+	if err != nil {
+		return nil, err
+	}
+
 	txIns := make([]*wire.TxIn, 0, len(utxos))
 	for k := range utxos {
 		prevHash, err := chainhash.NewHashFromStr(utxos[k].TxnID)
@@ -262,7 +312,9 @@ func (c *client) assembleTxIns(ctx context.Context, redeemScript []byte, utxos [
 
 		// Add input
 		outPoint := wire.NewOutPoint(prevHash, utxos[k].Vout, tree)
-		txIn := wire.NewTxIn(outPoint, utxos[k].Satoshis, redeemScript)
+		//txIn := wire.NewTxIn(outPoint, utxos[k].Satoshis, rs)
+		_ = rs
+		txIn := wire.NewTxIn(outPoint, utxos[k].Satoshis, []byte{})
 		txIns = append(txIns, txIn)
 	}
 	return txIns, nil
@@ -326,7 +378,7 @@ func (c *client) createMultisigTx(ctx context.Context, a map[string]string) erro
 	for k := range utxos {
 		utxoList = append(utxoList, utxos[k])
 		foundAmount += utxos[k].Amount
-		fmt.Printf("foundAmount %v\n", foundAmount)
+		//fmt.Printf("foundAmount %v\n", foundAmount)
 		if foundAmount > amount {
 			break
 		}
@@ -342,7 +394,7 @@ func (c *client) createMultisigTx(ctx context.Context, a map[string]string) erro
 		return fmt.Errorf("foundAtoms: %v", err)
 	}
 
-	spew.Dump(utxoList)
+	//spew.Dump(utxoList)
 
 	// Get redeem script and signers
 	moir, err := c.getMultisigOutInfo(ctx, utxoList[0].TxnID,
@@ -356,17 +408,8 @@ func (c *client) createMultisigTx(ctx context.Context, a map[string]string) erro
 	}
 	signers := moir.M
 
-	// Get previous outpoints
-	txIns, err := c.assembleTxIns(ctx, redeemScript, utxoList)
-	if err != nil {
-		return fmt.Errorf("getPrevOutpoints: %v", err)
-	}
-
 	// Assemble tx
 	unsignedTx := wire.NewMsgTx()
-	for k := range txIns {
-		unsignedTx.AddTxIn(txIns[k])
-	}
 
 	// Output
 	script, err := txscript.PayToAddrScript(toAddress)
@@ -395,8 +438,25 @@ func (c *client) createMultisigTx(ctx context.Context, a map[string]string) erro
 		changeScript)
 	unsignedTx.AddTxOut(txOutChange)
 
+	// Get previous outpoints
+	raw := false
+	if raw {
+		txIns, err := c.assembleRawTxIns(ctx, redeemScript, utxoList)
+		if err != nil {
+			return fmt.Errorf("getPrevOutpoints: %v", err)
+		}
+		_ = txIns
+	} else {
+		txIns, err := c.assembleTxIns(ctx, redeemScript, utxoList)
+		if err != nil {
+			return fmt.Errorf("getPrevOutpoints: %v", err)
+		}
+		for k := range txIns {
+			unsignedTx.AddTxIn(txIns[k])
+		}
+	}
+
 	// Dump
-	fmt.Printf("tx: %v", spew.Sdump(unsignedTx))
 	log.Tracef("%v", spew.Sdump(unsignedTx))
 	serializedTX, err := unsignedTx.Bytes()
 	if err != nil {
@@ -416,6 +476,17 @@ func (c *client) signMultiSigTx(ctx context.Context, a map[string]string) error 
 	if err != nil {
 		return fmt.Errorf("DecodeString %v", err)
 	}
+	//inputs, err := ArgAsString("inputs", a)
+	//if err != nil {
+	//	return err
+	//}
+	//var ins []types.RawTxInput
+	//err = json.Unmarshal([]byte(inputs), &ins)
+	//if err != nil {
+	//	return fmt.Errorf("unmarshal: %v", err)
+	//}
+	//spew.Dump(ins)
+	//panic("x")
 
 	unsignedTX := wire.NewMsgTx()
 	if err != nil {
@@ -427,7 +498,7 @@ func (c *client) signMultiSigTx(ctx context.Context, a map[string]string) error 
 	}
 
 	var srtr types.SignRawTransactionResult
-	err = c.walletCall(ctx, "signrawtransaction", &srtr, unsignedTXS)
+	err = c.walletCall(ctx, "signrawtransaction", &srtr, unsignedTXS) //, ins)
 	if err != nil {
 		return err
 	}
@@ -542,6 +613,36 @@ func (c *client) sweepMultisig(ctx context.Context, a map[string]string) error {
 	return fmt.Errorf("not implemented yet")
 }
 
+func (c *client) deserializeTx(ctx context.Context, a map[string]string) error {
+	txHexS, err := ArgAsString("tx", a)
+	if err != nil {
+		return err
+	}
+	txHex, err := hex.DecodeString(txHexS)
+	if err != nil {
+		return err
+	}
+
+	tx := wire.NewMsgTx()
+	err = tx.FromBytes(txHex)
+	if err != nil {
+		return err
+	}
+	spew.Dump(tx)
+
+	for k := range tx.TxIn {
+		fmt.Printf("%x\n", tx.TxIn[k].SignatureScript)
+		disbuf, err := txscript.DisasmString(tx.TxIn[k].SignatureScript)
+		if err != nil {
+			fmt.Printf("could not decode script %v: %v\n", k, err)
+			continue
+		}
+		fmt.Printf("%v: %v\n", k, disbuf)
+	}
+
+	return nil
+}
+
 func _main() error {
 	cfg, args, err := loadConfig()
 	if err != nil {
@@ -590,6 +691,8 @@ func _main() error {
 			return c.multisigInfo(ctx, a)
 		case "importredeemscript":
 			return c.importRedeemScript(ctx, a)
+		case "deserializetx":
+			return c.deserializeTx(ctx, a)
 		case "sweepmultisig":
 			return c.sweepMultisig(ctx, a)
 		default:
